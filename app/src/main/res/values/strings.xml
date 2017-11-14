@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">oru_5</string>
+    <string name="login_err_empty_fields_title">Missing data</string>
+    <string name="login_err_empty_fields_msg">Either your name or password is empty. Try again with both fields filled to complete your registration.</string>
+    <string name="login_err_empty_fields_btn">Ok</string>
+    <string name="login_reg_title">Register</string>
+    <string name="login_reg_msg">Are you sure you want to register account?</string>
+    <string name="login_reg_btn_pos">Register</string>
+    <string name="login_reg_btn_neg">Cancel</string>
+    <string name="login_reg_success_title">Registration complete</string>
+    <string name="login_reg_success_msg">Your account has been registered.</string>
+    <string name="login_reg_success_btn_pos">Continue</string>
+    <string name="title_activity_maps">Map</string>
+</resources>
