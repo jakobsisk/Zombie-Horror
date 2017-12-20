@@ -1,6 +1,7 @@
 package com.oru.jakobsisk.oru_5;
 
 import android.os.AsyncTask;
+import android.os.Handler;
 import android.util.Log;
 import android.view.View;
 
@@ -10,8 +11,10 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.Socket;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -23,8 +26,8 @@ public class ServerConn {
 
     // TODO: 2017-10-26 Change from Class to Service
 
-    private LoginActivity loginActivity;
-    private MapsActivity mapsActivity;
+    private LoginActivity mLoginActivity;
+    private MapsActivity mMapsActivity;
 
     // Server
     private final static int SERVER_PORT = 2002;
@@ -33,25 +36,30 @@ public class ServerConn {
     private final static String SERVER_VERSION = "0.3";
     private final static int SERVER_QUEUE_START = 5500;
 
-    private InetAddress host;
-    private Socket socket;
-    private PrintWriter lineSender;
-    private String status;
-    private ServerListenerThread serverListenerThread;
-    private TreeMap<Integer, Command> commandQueue = new TreeMap<>();
+    private final static int INTERVAL_SEND_DATA = 10000; // 10 seconds
+    private final static int INTERVAL_GET_DATA = 10000; // 10 seconds
+
+    private InetAddress mHost;
+    private Socket mSocket;
+    private PrintWriter mLineSender;
+    private String mStatus;
+    private ServerListenerThread mServerListenerThread;
+    private TreeMap<Integer, Command> mCommandQueue = new TreeMap<>();
+    private List<Command> mIntervalCommands = new ArrayList<>();
+    private Handler mIntervalCommandSender = new Handler();
 
     // Getters
-    public String getStatus() { return status; }
+    public String getStatus() { return mStatus; }
 
-    public ServerConn(LoginActivity loginActivity) {
-        this.loginActivity = loginActivity;
+    public ServerConn(LoginActivity mLoginActivity) {
+        this.mLoginActivity = mLoginActivity;
 
         Initialize init = new Initialize();
         init.execute();
     }
 
-    public ServerConn(MapsActivity mapsActivity) {
-        this.mapsActivity = mapsActivity;
+    public ServerConn(MapsActivity mMapsActivity) {
+        this.mMapsActivity = mMapsActivity;
 
         Initialize init = new Initialize();
         init.execute();
@@ -67,7 +75,7 @@ public class ServerConn {
         if (response.getQueueNr() == 0) {
             switch (response.getType()) {
                 case "ASYNC":
-                    if (mapsActivity != null) {
+                    if (mMapsActivity != null) {
                         // TODO: 2017-10-30 Handle async responses
                     }
                     
@@ -80,17 +88,17 @@ public class ServerConn {
         }
         else {
             // Save the corresponding command if it exists
-            Command command = commandQueue.get(response.getQueueNr());
+            Command command = mCommandQueue.get(response.getQueueNr());
 
             // Check if response matches a sent command
             if (command != null) {
                 Log.d("log", "Found original command.");
                 response.setCommand(command);
 
-                if (loginActivity != null) {
+                if (mLoginActivity != null) {
                     switch(response.getType()) {
                         case "REGISTERED": case "WELCOME":
-                            loginActivity.loginSuccess(command.getParams());
+                            mLoginActivity.loginSuccess(command.getParams());
 
                             break;
                         case "ERROR": default :
@@ -99,13 +107,24 @@ public class ServerConn {
                             break;
                     }
                 }
-                else if (mapsActivity != null) {
-                    //mapsActivity.handleServerResponse(response);
+                else if (mMapsActivity != null) {
+                    switch(response.getType()) {
+                        case "WELCOME":
+                            mMapsActivity.loginSuccess();
+
+                            break;
+                        case "GOODBYE":
+                            mMapsActivity.logoutSuccess();
+
+                            break;
+                        case "ERROR":default:
+                            handleError(response.getParams()[0]);
+                    }
                 }
 
                 // Remove command from queue after server has confirmed that it has been handled
                 Log.d("log", "Removing original command.");
-                commandQueue.remove(response.getQueueNr());
+                mCommandQueue.remove(response.getQueueNr());
             }
             else {
                 String errorMsg = "client_no_origin";
@@ -117,28 +136,32 @@ public class ServerConn {
     public int prepCommand(String type, String[] params) {
         int queueNr = SERVER_QUEUE_START;
 
-        if (!commandQueue.isEmpty()) {
-            queueNr += commandQueue.lastKey();
+        if (!mCommandQueue.isEmpty()) {
+            queueNr += mCommandQueue.lastKey();
         }
 
         Command command = new Command(queueNr, type, params);
-        commandQueue.put(queueNr, command);
+        mCommandQueue.put(queueNr, command);
 
         return queueNr;
     }
 
     public void sendCommand (int queueNr) {
-        commandQueue.get(queueNr).send();
+        mCommandQueue.get(queueNr).send();
+    }
+
+    public void addIntervalCommand(Command command) {
+        mIntervalCommands.add(command);
     }
 
     public void handleError(String errorMsg) {
         Log.d("log", "Error: " + errorMsg);
 
-        if (loginActivity != null) {
-            loginActivity.handleError(errorMsg);
+        if (mLoginActivity != null) {
+            mLoginActivity.handleError(errorMsg);
         }
-        else if (mapsActivity != null) {
-            mapsActivity.handleError(errorMsg);
+        else if (mMapsActivity != null) {
+            mMapsActivity.handleError(errorMsg);
         }
     }
 
@@ -154,22 +177,38 @@ public class ServerConn {
             Boolean success = false;
 
             try {
-                host = InetAddress.getByName(SERVER_ADDR);
-                socket = new Socket(host, SERVER_PORT);
+                mHost = InetAddress.getByName(SERVER_ADDR);
+                mSocket = new Socket(mHost, SERVER_PORT);
 
-                serverListenerThread = new ServerListenerThread(ServerConn.this, socket);
-                serverListenerThread.start();
-                lineSender = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
+                mServerListenerThread = new ServerListenerThread(ServerConn.this, mSocket);
+                mServerListenerThread.start();
+                mLineSender = new PrintWriter(new BufferedWriter(new OutputStreamWriter(mSocket.getOutputStream())), true);
 
-                status = "connected";
+                mStatus = "connected";
                 success = true;
             }
             catch (IOException e) {
-                status = "error";
+                mStatus = "error";
                 Log.d("log", "Exception: " + e.getMessage());
                 errorMsg = "client_socket";
                 success = false;
             }
+
+            mIntervalCommandSender.post(new Runnable() {
+                private long time = 0;
+
+                @Override
+                public void run() {
+                    if (!mIntervalCommands.isEmpty()) {
+                        for (Command command : mIntervalCommands) {
+                            sendCommand(command.getQueueNr());
+                        }
+                    }
+
+                    time += 1000;
+                    mIntervalCommandSender.postDelayed(this, INTERVAL_SEND_DATA);
+                }
+            });
 
             return success;
         }
@@ -204,7 +243,7 @@ public class ServerConn {
         private Config config;
         private String[] params;
 
-        public int getPriority() { return config.getPriority(); }
+        public int getQueueNr() { return queueNr; }
         public String[] getParams() { return params; }
 
         public Command(int queueNr, String type, String[] params) {
@@ -268,7 +307,7 @@ public class ServerConn {
                 try {
                     Log.d("log", "Me: " + line);
 
-                    lineSender.println(line);
+                    mLineSender.println(line);
 
                     success = true;
                 }

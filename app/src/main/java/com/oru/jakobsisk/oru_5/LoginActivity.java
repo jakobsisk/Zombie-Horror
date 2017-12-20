@@ -16,70 +16,70 @@ import android.widget.TextView;
 
 public class LoginActivity extends AppCompatActivity {
 
-    private SharedPreferences sharedPref;
-    private ServerConn serverConn;
+    private SharedPreferences mSharedPref;
+    private ServerConn mServerConn;
 
     // UI
-    private EditText editTxtName;
-    private EditText editTxtPassword;
-    private Button btnLogin;
-    private Button btnReg;
-    private TextView txtViewStatus;
-    private ProgressBar progressBar;
+    private EditText mEditTxtName;
+    private EditText mEditTxtPassword;
+    private Button mBtnLogin;
+    private Button mBtnReg;
+    private TextView mTxtViewStatus;
+    private ProgressBar mProgressBar;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
 
-        sharedPref = getSharedPreferences("prefs", Context.MODE_PRIVATE);
+        mSharedPref = getSharedPreferences("prefs", Context.MODE_PRIVATE);
 
         Log.d("log", "Connecting to server.");
-        serverConn = new ServerConn(LoginActivity.this);
+        mServerConn = new ServerConn(LoginActivity.this);
 
         // UI
-        editTxtName = (EditText)findViewById(R.id.username);
-        editTxtPassword = (EditText)findViewById(R.id.password);
-        btnLogin = (Button)findViewById(R.id.login);
-        btnReg = (Button)findViewById(R.id.register);
-        txtViewStatus = (TextView)findViewById(R.id.status);
-        progressBar = (ProgressBar)findViewById(R.id.progressBar);
+        mEditTxtName = findViewById(R.id.username);
+        mEditTxtPassword = findViewById(R.id.password);
+        mBtnLogin = findViewById(R.id.login);
+        mBtnReg = findViewById(R.id.register);
+        mTxtViewStatus = findViewById(R.id.status);
+        mProgressBar = findViewById(R.id.progressBar);
 
         // -- USER INTERACTION -- //
 
         // Login button
-        btnLogin.setOnClickListener(new View.OnClickListener() {
+        mBtnLogin.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                String name = editTxtName.getText().toString();
-                String password = editTxtPassword.getText().toString();
+                String name = mEditTxtName.getText().toString();
+                String password = mEditTxtPassword.getText().toString();
 
-                txtViewStatus.setVisibility(View.VISIBLE);
-                progressBar.setVisibility(View.VISIBLE);
-                txtViewStatus.setText("Logging in");
-
-                String[] params = {name, password};
-                int commandNr = serverConn.prepCommand("login", params);
-                progressBar.setProgress(50);
-                serverConn.sendCommand(commandNr);
-                progressBar.setProgress(100);
+                login(name, password);
             }
         });
 
         // Register button
-        btnReg.setOnClickListener(new View.OnClickListener() {
+        mBtnReg.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                String name = editTxtName.getText().toString();
-                String password = editTxtPassword.getText().toString();
-
-                txtViewStatus.setVisibility(View.VISIBLE);
-                progressBar.setVisibility(View.VISIBLE);
-                txtViewStatus.setText("Registering");
+                String name = mEditTxtName.getText().toString();
+                String password = mEditTxtPassword.getText().toString();
 
                 register(name, password);
             }
         });
+    }
+
+    private void login(String n, String p) {
+        mTxtViewStatus.setVisibility(View.VISIBLE);
+        mProgressBar.setVisibility(View.VISIBLE);
+        mTxtViewStatus.setText("Logging in");
+
+        String[] params = {n, p};
+        int commandNr = mServerConn.prepCommand("login", params);
+        mProgressBar.setProgress(50);
+        mServerConn.sendCommand(commandNr);
+        mProgressBar.setProgress(100);
     }
 
     private void register(String n, String p) {
@@ -103,10 +103,12 @@ public class LoginActivity extends AppCompatActivity {
                         @Override
                         public void onClick(DialogInterface dialog, int which) {
                             String[] params = {name, password};
-                            int commandNr = serverConn.prepCommand("reg", params);
-                            progressBar.setProgress(50);
-                            serverConn.sendCommand(commandNr);
-                            progressBar.setProgress(100);
+                            int commandNr = mServerConn.prepCommand("reg", params);
+                            mTxtViewStatus.setVisibility(View.VISIBLE);
+                            mProgressBar.setVisibility(View.VISIBLE);
+                            mTxtViewStatus.setText("Registering");
+                            mServerConn.sendCommand(commandNr);
+                            mProgressBar.setProgress(100);
                         }
                     })
                     .setNegativeButton(getString(R.string.login_reg_btn_neg), null)
@@ -115,11 +117,11 @@ public class LoginActivity extends AppCompatActivity {
     }
 
     public void loginSuccess(String[] commandParams) {
-        progressBar.setProgress(100);
+        mProgressBar.setProgress(100);
 
         Log.d("log", "Login succeeded. Loading maps activity.");
 
-        SharedPreferences.Editor editor = sharedPref.edit();
+        SharedPreferences.Editor editor = mSharedPref.edit();
         editor.putString("name", commandParams[0]);
         editor.putString("password", commandParams[1]);
         editor.apply();
