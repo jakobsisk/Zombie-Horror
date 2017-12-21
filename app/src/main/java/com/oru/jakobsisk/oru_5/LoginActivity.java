@@ -77,9 +77,16 @@ public class LoginActivity extends AppCompatActivity {
 
         String[] params = {n, p};
         int commandNr = mServerConn.prepCommand("login", params);
-        mProgressBar.setProgress(50);
+        mProgressBar.setProgress(25);
         mServerConn.sendCommand(commandNr);
-        mProgressBar.setProgress(100);
+        mProgressBar.setProgress(50);
+
+        // Logout so that the maps activity can login
+        // TODO: 2017-12-21 Improvement - Transfer socket object between activities
+        params = new String[0];
+        commandNr = mServerConn.prepCommand("logout", params);
+        mProgressBar.setProgress(75);
+        mServerConn.sendCommand(commandNr);
     }
 
     private void register(String n, String p) {
@@ -117,14 +124,14 @@ public class LoginActivity extends AppCompatActivity {
     }
 
     public void loginSuccess(String[] commandParams) {
-        mProgressBar.setProgress(100);
-
         Log.d("log", "Login succeeded. Loading maps activity.");
 
         SharedPreferences.Editor editor = mSharedPref.edit();
         editor.putString("name", commandParams[0]);
         editor.putString("password", commandParams[1]);
         editor.apply();
+
+        mProgressBar.setProgress(100);
 
         Intent intent = new Intent(this, MapsActivity.class);
         startActivity(intent);

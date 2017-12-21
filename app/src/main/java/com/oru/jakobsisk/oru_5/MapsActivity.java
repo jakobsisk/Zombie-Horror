@@ -23,16 +23,22 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
+import java.util.TreeMap;
 
 public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback {
 
     public static final int PERMISSIONS_REQUEST_ACCESS_FINE_LOCATION = 1;
-    public static final int DEFAULT_ZOOM = 10;
+    public static final int DEFAULT_ZOOM = 7;
 
     private GoogleMap mMap;
     private Boolean mLocationPermissionGranted;
+    private Location mLastKnownLocation;
+    private Marker mUserMarker = null;
+    private TreeMap<String, Marker> mPlayerMarkers = new TreeMap<>();
 
     private SharedPreferences mSharedPref;
     private String mPlayerName;
@@ -110,9 +116,28 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 public void onLocationChanged(Location location) {
                     // Called when a new location is found by the GPS location provider.
                     Log.d("map", "New location received.");
-                    Log.d("map", "  Latitude - " + location.getLatitude());
-                    Log.d("map", "  Longitude - " + location.getLongitude());
-                    updateMap(location);
+                    Log.d("map", "  Latitude    - " + location.getLatitude());
+                    Log.d("map", "  Longitude   - " + location.getLongitude());
+                    mLastKnownLocation = location;
+
+                    // Send location to server
+                    syncLocation();
+
+                    // If this is the first time location is recorded
+                    if (mUserMarker == null) {
+                        LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
+                        String title = "You";
+                        mUserMarker = createMarker("DEFAULT", latLng, title);
+                        mUserMarker.showInfoWindow();
+
+                        getAllPlayers();
+                    }
+
+                    LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
+                    // Update camera to new position
+                    mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, DEFAULT_ZOOM));
+                    // Update marker to new position
+                    updateMarkerLocation(latLng, mUserMarker);
                 }
 
                 public void onStatusChanged(String provider, int status, Bundle extras) {}
@@ -134,14 +159,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
     }
 
-    public void updateMap(Location location) {
-        Log.d("map", "Updating map.");
-
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(
-                new LatLng(location.getLatitude(),
-                        location.getLongitude()), DEFAULT_ZOOM));
-    }
-
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         MenuInflater inflater = getMenuInflater();
@@ -161,6 +178,65 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
     }
 
+    public Marker createMarker(String status, LatLng latLng, String t) {
+        float hue = BitmapDescriptorFactory.HUE_AZURE;
+        String title = t;
+        switch (status) {
+            case "HUMAN":
+                title = title + " (H)";
+                hue = BitmapDescriptorFactory.HUE_GREEN;
+                break;
+            case "ZOMBIE":
+                title = title + " (Z)";
+                hue = BitmapDescriptorFactory.HUE_RED;
+
+                break;
+        }
+
+        Marker marker = buildMarker(latLng, title, hue);
+
+        return marker;
+    }
+
+    public Marker buildMarker(final LatLng latLng, final String title, final float hue) {
+        Marker marker = mMap.addMarker(new MarkerOptions()
+                        .position(latLng)
+                        .icon(BitmapDescriptorFactory.defaultMarker(hue))
+                        .title(title));
+
+        return marker;
+    }
+
+    public void updateMarkerLocation(LatLng latLng, Marker marker) {
+        Log.d("map", "Updating marker.");
+
+        marker.setPosition(latLng);
+    }
+
+    public void getAllPlayers() {
+        String[] params = {};
+        int commandNr = mServerConn.prepCommand("getVisiblePlayers", params);
+        mServerConn.sendCommand(commandNr);
+    }
+
+    public void createPlayer(final String name, final String status, String lat, String lng) {
+        // Server logged in user as well as other players
+        // We don't want to add the logged in user again
+        if (name != mPlayerName) {
+            Log.d("map", "Received player " + name);
+            Log.d("log", "  Adding player to map...");
+            final LatLng latLng = new LatLng(Double.parseDouble(lat), Double.parseDouble(lng));
+
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Marker marker = createMarker(status, latLng, name);
+
+                    mPlayerMarkers.put(name, marker);
+                }
+            });
+        }
+    }
 
     // <<------ SERVER ------>> //
 
@@ -171,7 +247,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         mSharedPref = getSharedPreferences("prefs", Context.MODE_PRIVATE);
         mPlayerName = mSharedPref.getString("name", "");
 
-        // If user data is found in shared preferences
+        // If user data is not found in shared preferences
         if (mPlayerName == null) {
             AlertDialog.Builder builder = new AlertDialog.Builder(this);
             builder.setCancelable(false);
@@ -194,18 +270,48 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             String playerPassword = mSharedPref.getString("password", "");
 
             // Login
-            String[] params = {mPlayerName, playerPassword};
+            String[] params = { mPlayerName, playerPassword };
             int commandNr = mServerConn.prepCommand("login", params);
             mServerConn.sendCommand(commandNr);
         }
     }
 
-    public void loginSuccess() {
-        //String latitude = ;
-        //String longitude = ;
-        //String[] params = {latitude, longitude};
-        //int commandNr = mServerConn.prepCommand("login", params);
-        //mServerConn.sendCommand(commandNr);
+    public void getStatus() {
+        // Refresh marker of user
+        String[] params = {};
+        int commandNr = mServerConn.prepCommand("getStatus", params);
+        mServerConn.sendCommand(commandNr);
+    }
+
+    public void getStatusSuccess(String s) {
+        final String status = s;
+
+        Boolean waitForMap = true;
+
+        // Wait for a marker with the users location to be created, then proceed to modify marker with new status
+        while(waitForMap) {
+            if (mUserMarker != null) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        LatLng latLng = new LatLng(mLastKnownLocation.getLatitude(), mLastKnownLocation.getLongitude());
+                        String title = "You";
+                        mUserMarker.remove();
+                        mUserMarker = createMarker(status, latLng, title);
+
+                        mUserMarker.showInfoWindow();
+                    }
+                });
+
+                waitForMap = false;
+            }
+        }
+    }
+
+    public void syncLocation() {
+        String[] params = { String.valueOf(mLastKnownLocation.getLatitude()), String.valueOf(mLastKnownLocation.getLongitude()) };
+        int commandNr = mServerConn.prepCommand("setLocation", params);
+        mServerConn.sendCommand(commandNr);
     }
 
     public void logout() {

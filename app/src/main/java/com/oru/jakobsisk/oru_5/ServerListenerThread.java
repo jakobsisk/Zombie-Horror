@@ -16,36 +16,36 @@ public class ServerListenerThread extends Thread {
     // TODO: 2017-10-26 Find a better way to handle returning data to several activities. Service maybe?
     private ServerConn owner;
 
-    private Boolean quit;
-    private Socket socket;
-    private BufferedReader lineReceiver;
+    private Boolean mQuit;
+    private Socket mSocket;
+    private BufferedReader mLineReceiver;
 
     public ServerListenerThread(ServerConn owner, Socket socket) {
-        quit = false;
+        mQuit = false;
 
         this.owner = owner;
-        this.socket = socket;
+        this.mSocket = socket;
 
         try {
-            lineReceiver = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            mLineReceiver = new BufferedReader(new InputStreamReader(mSocket.getInputStream()));
         }
         catch (IOException e) {
-            quit = true;
+            mQuit = true;
         }
     }
 
     public void run() {
-        while (!quit) {
+        while (!mQuit) {
             String line = "";
             try {
-                line = lineReceiver.readLine();
+                line = mLineReceiver.readLine();
                 if (line == null) {
                     // TODO: 2017-10-26 Handle null (null means disconnected)
-                    quit = true;
+                    mQuit = true;
                 }
             }
             catch (IOException e) {
-                quit = true;
+                mQuit = true;
             }
             owner.handleReceivedLine(line);
         }

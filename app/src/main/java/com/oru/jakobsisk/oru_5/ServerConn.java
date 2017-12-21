@@ -42,33 +42,29 @@ public class ServerConn {
     private InetAddress mHost;
     private Socket mSocket;
     private PrintWriter mLineSender;
-    private String mStatus;
     private ServerListenerThread mServerListenerThread;
     private TreeMap<Integer, Command> mCommandQueue = new TreeMap<>();
     private List<Command> mIntervalCommands = new ArrayList<>();
     private Handler mIntervalCommandSender = new Handler();
+    // Used if client expects multiple lines of response from server
+    private int mResponseTotal;
+    private int mResponseCount;
 
-    // Getters
-    public String getStatus() { return mStatus; }
-
-    public ServerConn(LoginActivity mLoginActivity) {
-        this.mLoginActivity = mLoginActivity;
+    public ServerConn(LoginActivity loginActivity) {
+        this.mLoginActivity = loginActivity;
 
         Initialize init = new Initialize();
         init.execute();
     }
 
-    public ServerConn(MapsActivity mMapsActivity) {
-        this.mMapsActivity = mMapsActivity;
+    public ServerConn(MapsActivity mapsActivity) {
+        this.mMapsActivity = mapsActivity;
 
         Initialize init = new Initialize();
         init.execute();
     }
 
     public void handleReceivedLine(String line) {
-        Log.d("log", "Server: " + line);
-        Log.d("log", "Processing server response.");
-
         Response response = new Response(line);
 
         // If server response has no number
@@ -100,9 +96,17 @@ public class ServerConn {
                         case "REGISTERED": case "WELCOME":
                             mLoginActivity.loginSuccess(command.getParams());
 
+                            mCommandQueue.remove(response.getQueueNr());
+
+                            break;
+                        case "GOODBYE":
+                            mCommandQueue.remove(response.getQueueNr());
+
                             break;
                         case "ERROR": default :
                             handleError(response.getParams()[0]);
+
+                            mCommandQueue.remove(response.getQueueNr());
 
                             break;
                     }
@@ -110,21 +114,53 @@ public class ServerConn {
                 else if (mMapsActivity != null) {
                     switch(response.getType()) {
                         case "WELCOME":
-                            mMapsActivity.loginSuccess();
+                            mMapsActivity.getStatus();
+
+                            mCommandQueue.remove(response.getQueueNr());
+
+                            break;
+                        case "YOU-ARE":
+                            mMapsActivity.getStatusSuccess(response.getParams()[0]);
+
+                            mCommandQueue.remove(response.getQueueNr());
+
+                            break;
+                        case "VISIBLE-PLAYERS":
+                            mResponseTotal = Integer.parseInt(response.getParams()[1]);
+                            mResponseCount = 0;
+
+                            break;
+                        case "PLAYER":
+                            mResponseCount++;
+
+                            String name = response.getParams()[0];
+                            String status = response.getParams()[1];
+                            String lat = response.getParams()[2];
+                            String lng = response.getParams()[3];
+                            mMapsActivity.createPlayer(name, status, lat, lng);
+
+                            if (mResponseCount == mResponseTotal) {
+
+                                mCommandQueue.remove(response.getQueueNr());
+                            }
+
+                            break;
+                        case "OK":
+
 
                             break;
                         case "GOODBYE":
                             mMapsActivity.logoutSuccess();
 
+                            mCommandQueue.remove(response.getQueueNr());
+
                             break;
                         case "ERROR":default:
                             handleError(response.getParams()[0]);
+
+                            mCommandQueue.remove(response.getQueueNr());
                     }
                 }
-
-                // Remove command from queue after server has confirmed that it has been handled
-                Log.d("log", "Removing original command.");
-                mCommandQueue.remove(response.getQueueNr());
             }
             else {
                 String errorMsg = "client_no_origin";
@@ -184,11 +220,9 @@ public class ServerConn {
                 mServerListenerThread.start();
                 mLineSender = new PrintWriter(new BufferedWriter(new OutputStreamWriter(mSocket.getOutputStream())), true);
 
-                mStatus = "connected";
                 success = true;
             }
             catch (IOException e) {
-                mStatus = "error";
                 Log.d("log", "Exception: " + e.getMessage());
                 errorMsg = "client_socket";
                 success = false;
@@ -231,12 +265,12 @@ public class ServerConn {
             put("logout",               new Config(1, "LOGOUT"));
             put("reg",                  new Config(1, "REGISTER"));
 
-            put("getlocation",          new Config(1, "WHERE-AM-I"));
-            put("setlocation",          new Config(1, "I-AM-AT"));
-            put("getstatus",            new Config(1, "WHAT-AM-I"));
+            put("getLocation",          new Config(1, "WHERE-AM-I"));
+            put("setLocation",          new Config(1, "I-AM-AT"));
+            put("getStatus",            new Config(1, "WHAT-AM-I"));
             put("setStatus",            new Config(1, "TURN"));
-            put("getvisibleplayers",    new Config(1, "LIST-VISIBLE-PLAYERS"));
-            put("setvisibility",        new Config(1, "SET-VISIBILITY"));
+            put("getVisiblePlayers",    new Config(1, "LIST-VISIBLE-PLAYERS"));
+            put("setVisibility",        new Config(1, "SET-VISIBILITY"));
         }};
 
         private int queueNr;
@@ -247,24 +281,12 @@ public class ServerConn {
         public String[] getParams() { return params; }
 
         public Command(int queueNr, String type, String[] params) {
-            Log.d("log", "New command:");
-            Log.d("log", "  Type - : " + type);
-            if (params != null) {
-                String outp = "  Params - :";
-                for (String param: params) {
-                    outp += " " + param;
-                }
-                Log.d("log", outp);
-            }
-
             this.queueNr = queueNr;
             this.config = configs.get(type);
             this.params = params;
         }
 
         public String generateLine() {
-            Log.d("log", "  Generating lines.");
-
             String line = Integer.toString(queueNr) + " " + config.getSyntax();
 
             if (params != null) {
@@ -305,7 +327,8 @@ public class ServerConn {
                 String line = params[0];
 
                 try {
-                    Log.d("log", "Me: " + line);
+                    Log.d("log", "Line to server:");
+                    Log.d("log", "  " + line);
 
                     mLineSender.println(line);
 
@@ -345,6 +368,9 @@ public class ServerConn {
 
         public Response(String line) {
             this.line = line;
+            Log.d("log", "Line from server received:");
+            Log.d("log", "  " + line);
+
 
             parseLine();
         }
