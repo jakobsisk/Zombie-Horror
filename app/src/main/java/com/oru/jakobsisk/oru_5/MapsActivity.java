@@ -32,7 +32,8 @@ import java.util.TreeMap;
 public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback {
 
     public static final int PERMISSIONS_REQUEST_ACCESS_FINE_LOCATION = 1;
-    public static final int DEFAULT_ZOOM = 7;
+    public static final int DEFAULT_ZOOM = 15;
+    public static final String VISIBILITY = "10";
 
     private GoogleMap mMap;
     private Boolean mLocationPermissionGranted;
@@ -242,7 +243,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         Log.d("map", "Received player " + name);
         final LatLng latLng = new LatLng(Double.parseDouble(lat), Double.parseDouble(lng));
 
-        if (name == mPlayerName) {
+        if (name.equals(mPlayerName)) {
             Log.d("map", "  Player is user. Updating location...");
             runOnUiThread(new Runnable() {
                 @Override
@@ -252,7 +253,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             });
         }
         else {
-
             if (mPlayerMarkers.containsKey(name)) {
                 Log.d("map", "  Player already exists, updating location...");
                 runOnUiThread(new Runnable() {
@@ -275,6 +275,16 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 });
             }
         }
+    }
+
+    public void removePlayer(final String name) {
+        Log.d("map", "Removing player - " + name);
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                mPlayerMarkers.get(name).remove();
+            }
+        });
     }
 
     // <<------ SERVER ------>> //
@@ -311,6 +321,10 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             // Login
             String[] params = { mPlayerName, playerPassword };
             int commandNr = mServerConn.prepCommand("login", params);
+            mServerConn.sendCommand(commandNr);
+
+            params = new String[]{ VISIBILITY };
+            commandNr = mServerConn.prepCommand("setVisibility", params);
             mServerConn.sendCommand(commandNr);
         }
     }

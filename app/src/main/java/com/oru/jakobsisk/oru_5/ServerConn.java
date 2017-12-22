@@ -74,10 +74,20 @@ public class ServerConn {
                                 break;
                             case "PLAYER":
                                 String name = response.getParams()[1];
-                                String status = response.getParams()[2];
-                                String lat = response.getParams()[3];
-                                String lng = response.getParams()[4];
-                                mMapsActivity.createPlayer(name, status, lat, lng);
+                                switch (response.getParams()[2]) {
+                                    case "GONE":
+                                        mMapsActivity.removePlayer(name);
+
+                                        break;
+                                    case "ZOMBIE":case "HUMAN":
+                                        String status = response.getParams()[2];
+                                        String lat = response.getParams()[3];
+                                        String lng = response.getParams()[4];
+
+                                        mMapsActivity.createPlayer(name, status, lat, lng);
+
+                                        break;
+                                }
 
                                 break;
                         }
