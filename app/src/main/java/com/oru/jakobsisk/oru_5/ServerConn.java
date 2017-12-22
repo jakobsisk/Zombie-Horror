@@ -36,16 +36,11 @@ public class ServerConn {
     private final static String SERVER_VERSION = "0.3";
     private final static int SERVER_QUEUE_START = 5500;
 
-    private final static int INTERVAL_SEND_DATA = 10000; // 10 seconds
-    private final static int INTERVAL_GET_DATA = 10000; // 10 seconds
-
     private InetAddress mHost;
     private Socket mSocket;
     private PrintWriter mLineSender;
     private ServerListenerThread mServerListenerThread;
     private TreeMap<Integer, Command> mCommandQueue = new TreeMap<>();
-    private List<Command> mIntervalCommands = new ArrayList<>();
-    private Handler mIntervalCommandSender = new Handler();
     // Used if client expects multiple lines of response from server
     private int mResponseTotal;
     private int mResponseCount;
@@ -72,7 +67,20 @@ public class ServerConn {
             switch (response.getType()) {
                 case "ASYNC":
                     if (mMapsActivity != null) {
-                        // TODO: 2017-10-30 Handle async responses
+                        switch (response.getParams()[0]) {
+                            case "YOU-ARE":
+                                mMapsActivity.setStatus(response.getParams()[1]);
+
+                                break;
+                            case "PLAYER":
+                                String name = response.getParams()[1];
+                                String status = response.getParams()[2];
+                                String lat = response.getParams()[3];
+                                String lng = response.getParams()[4];
+                                mMapsActivity.createPlayer(name, status, lat, lng);
+
+                                break;
+                        }
                     }
                     
                     break;
@@ -120,7 +128,7 @@ public class ServerConn {
 
                             break;
                         case "YOU-ARE":
-                            mMapsActivity.getStatusSuccess(response.getParams()[0]);
+                            mMapsActivity.setStatus(response.getParams()[0]);
 
                             mCommandQueue.remove(response.getQueueNr());
 
@@ -186,10 +194,6 @@ public class ServerConn {
         mCommandQueue.get(queueNr).send();
     }
 
-    public void addIntervalCommand(Command command) {
-        mIntervalCommands.add(command);
-    }
-
     public void handleError(String errorMsg) {
         Log.d("log", "Error: " + errorMsg);
 
@@ -227,22 +231,6 @@ public class ServerConn {
                 errorMsg = "client_socket";
                 success = false;
             }
-
-            mIntervalCommandSender.post(new Runnable() {
-                private long time = 0;
-
-                @Override
-                public void run() {
-                    if (!mIntervalCommands.isEmpty()) {
-                        for (Command command : mIntervalCommands) {
-                            sendCommand(command.getQueueNr());
-                        }
-                    }
-
-                    time += 1000;
-                    mIntervalCommandSender.postDelayed(this, INTERVAL_SEND_DATA);
-                }
-            });
 
             return success;
         }

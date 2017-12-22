@@ -137,7 +137,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                     // Update camera to new position
                     mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, DEFAULT_ZOOM));
                     // Update marker to new position
-                    updateMarkerLocation(latLng, mUserMarker);
+                    updateMarker(mUserMarker, latLng, null);
                 }
 
                 public void onStatusChanged(String provider, int status, Bundle extras) {}
@@ -207,10 +207,29 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         return marker;
     }
 
-    public void updateMarkerLocation(LatLng latLng, Marker marker) {
+    public void updateMarker(Marker marker, LatLng latLng, String status) {
         Log.d("map", "Updating marker.");
 
-        marker.setPosition(latLng);
+        if (latLng != null) {
+            marker.setPosition(latLng);
+        }
+        if (status != null) {
+            float hue = BitmapDescriptorFactory.HUE_AZURE;
+            switch (status) {
+                case "HUMAN":
+                    hue = BitmapDescriptorFactory.HUE_GREEN;
+                    break;
+                case "ZOMBIE":
+                    hue = BitmapDescriptorFactory.HUE_RED;
+
+                    break;
+            }
+            String oldTitle = marker.getTitle();
+            String newTitle = oldTitle.substring(0, oldTitle.length() - 3) + "(" + status.charAt(0) + ")";
+
+            marker.setTitle(newTitle);
+            marker.setIcon(BitmapDescriptorFactory.defaultMarker(hue));
+        }
     }
 
     public void getAllPlayers() {
@@ -220,21 +239,41 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
 
     public void createPlayer(final String name, final String status, String lat, String lng) {
-        // Server logged in user as well as other players
-        // We don't want to add the logged in user again
-        if (name != mPlayerName) {
-            Log.d("map", "Received player " + name);
-            Log.d("log", "  Adding player to map...");
-            final LatLng latLng = new LatLng(Double.parseDouble(lat), Double.parseDouble(lng));
+        Log.d("map", "Received player " + name);
+        final LatLng latLng = new LatLng(Double.parseDouble(lat), Double.parseDouble(lng));
 
+        if (name == mPlayerName) {
+            Log.d("map", "  Player is user. Updating location...");
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    Marker marker = createMarker(status, latLng, name);
-
-                    mPlayerMarkers.put(name, marker);
+                    updateMarker(mUserMarker, latLng, status);
                 }
             });
+        }
+        else {
+
+            if (mPlayerMarkers.containsKey(name)) {
+                Log.d("map", "  Player already exists, updating location...");
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        updateMarker(mPlayerMarkers.get(name), latLng, status);
+                    }
+                });
+            }
+            else {
+                Log.d("log", "  Player isn't on map. Adding player to map...");
+
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        Marker marker = createMarker(status, latLng, name);
+
+                        mPlayerMarkers.put(name, marker);
+                    }
+                });
+            }
         }
     }
 
@@ -283,7 +322,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         mServerConn.sendCommand(commandNr);
     }
 
-    public void getStatusSuccess(String s) {
+    public void setStatus(String s) {
         final String status = s;
 
         Boolean waitForMap = true;
